@@ -1,0 +1,33 @@
+#SCORE DTS 
+```{r}
+library(dplyr)
+
+leafdata <- leafdata %>%
+  mutate(
+    score = case_when(
+      damage_type %in% c("DT1", "DT2", "DT3", "DT4", "DT5", "DT12", "DT13", "DT14", "DT15", "DT16", 
+                         "DT29", "DT30", "DT32", "DT34", "DT35", "DT36", "DT41", "DT46", "DT51", "DT64", 
+                         "DT66", "DT69", "DT81", "DT101", "DT145") ~ "1: General",
+      damage_type %in% c("DT6", "DT8", "DT9", "DT24", "DT25", "DT45", "DT47", "DT52", "DT61", "DT63", 
+                         "DT67", "DT76", "DT109", "DT116", "DT119", "DT144", "DT79", "DT84", "DT85", 
+                         "DT90", "DT138", "DT72", "DT100", "DT101", "DT102", "MDT01") ~ "2: specialized",
+      damage_type %in% c("DT37", "DT102", "MDT02", "MDT03", "MDT04", "MDT5", "MDT6", "MDT7") ~ "3: extremely specialized",
+      damage_type %in% c("DT17", "DT20", "DT31", "DT33", "DT42", "DT43", "DT48", "DT54", "DT57", "DT58", 
+                         "DT59", "DT62", "DT68", "DT78", "DT79", "DT100", "DT104", "DT106", "DT122", "DT125", 
+                         "DT127", "DT128", "DT131", "DT146", "DT147") ~ "unscored",
+      TRUE ~ NA_character_  # Assign NA if no match
+    )
+  )
+
+```
+
+#rename NAs
+
+```{r}
+library(tidyverse)
+leafdata <- leafdata %>%
+  mutate(herbivory_type = ifelse(is.na(herbivory_type), "Undamaged", herbivory_type),
+         damage_type = ifelse(is.na(damage_type), "Undamaged", damage_type),
+         score = ifelse(is.na(score), "Undamaged", score))
+leafdata
+```
