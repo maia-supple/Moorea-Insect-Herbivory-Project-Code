@@ -1,0 +1,1356 @@
+---
+title: "Invasive plant species reduces insect feeding diversity and trophic interactions on a tropical volcanic island"
+output: html_notebook
+---
+#SCORE DTS 
+```{r}
+library(dplyr)
+
+leafdata <- leafdata %>%
+  mutate(
+    score = case_when(
+      damage_type %in% c("DT1", "DT2", "DT3", "DT4", "DT5", "DT12", "DT13", "DT14", "DT15", "DT16", 
+                         "DT29", "DT30", "DT32", "DT34", "DT35", "DT36", "DT41", "DT46", "DT51", "DT64", 
+                         "DT66", "DT69", "DT81", "DT101", "DT145") ~ "1: General",
+      damage_type %in% c("DT6", "DT8", "DT9", "DT24", "DT25", "DT45", "DT47", "DT52", "DT61", "DT63", 
+                         "DT67", "DT76", "DT109", "DT116", "DT119", "DT144", "DT79", "DT84", "DT85", 
+                         "DT90", "DT138", "DT72", "DT100", "DT101", "DT102", "MDT01") ~ "2: specialized",
+      damage_type %in% c("DT37", "DT102", "MDT02", "MDT03", "MDT04", "MDT5", "MDT6", "MDT7") ~ "3: extremely specialized",
+      damage_type %in% c("DT17", "DT20", "DT31", "DT33", "DT42", "DT43", "DT48", "DT54", "DT57", "DT58", 
+                         "DT59", "DT62", "DT68", "DT78", "DT79", "DT100", "DT104", "DT106", "DT122", "DT125", 
+                         "DT127", "DT128", "DT131", "DT146", "DT147") ~ "unscored",
+      TRUE ~ NA_character_  # Assign NA if no match
+    )
+  )
+
+```
+
+#rename NAs
+
+```{r}
+library(tidyverse)
+leafdata <- leafdata %>%
+  mutate(herbivory_type = ifelse(is.na(herbivory_type), "Undamaged", herbivory_type),
+         damage_type = ifelse(is.na(damage_type), "Undamaged", damage_type),
+         score = ifelse(is.na(score), "Undamaged", score))
+leafdata
+```
+##N, R, I TESTS
+#herb box plot code
+
+```{r}
+##HERBIVORY PLOT CODE 
+
+library(tidyverse)
+library(dplyr)
+
+herb_data <- leafdata %>% 
+  group_by(leaf, site, species, group) %>% 
+  summarise(total_HI = sum(percent), 
+            .groups = "drop")
+
+herb_data_plot <- herb_data %>%
+  filter(!is.na(total_HI)) %>%
+  group_by(group, species,site) %>%
+  summarize(
+    proportion_non_zero = sum(total_HI > 0.01) / n(),
+    .groups = "drop"
+  )
+
+
+herb_data_plot$species <- factor(herb_data_plot$species, levels = c("B. asiatica", "H. tiliaceus", "N. forsteri", "M. collina", "D. erecta", "S. malaccense", "H. rosa-sinensis", "M. citrofolia", "L. camara", "S. campanulata", "M. calvescens", "S. cumini"))
+
+library(ggplot2)
+herb_percent_plot_bar <- ggplot(herb_data_plot, aes(x = species, y = proportion_non_zero, fill = group)) +
+  geom_boxplot(position = position_dodge(width = 0.9), width = 0.7) +
+  labs(x = "Species", y = "Percent Herbivory", fill = "Group") +
+  scale_fill_manual(values = my_colors)+ 
+  theme_minimal() +
+  theme(axis.text=element_text(size=9),axis.title=element_text(size=12))+
+  coord_flip()+
+  geom_jitter(size= 0.7)
+  
+
+herb_percent_plot_bar
+
+ggsave("herb_percent_plot_bar.png", plot = herb_percent_plot_bar,  width = 5.76, height = 5, units = "in")
+```
+
+# ANOVA CODE herbiv
+
+```{r}
+## ANOVA CODE
+library(dplyr)
+
+anova_herb_data <- herb_data %>%
+  filter(!is.na(total_HI)) %>%  # Remove rows with NA values in total_HI
+  group_by(site,species,group) %>%
+  summarize(
+    proportion_non_zero = sum(total_HI > 0.01) / n(),
+    .groups = "drop"
+  )
+
+anova_herb_data
+
+herb_anova <- aov(anova_herb_data$proportion_non_zero ~ anova_herb_data$group, data=anova_herb_data)
+
+summary(herb_anova)
+
+plot(herb_anova)  
+
+# Perform Tukey's HSD post-hoc test
+tukey_herb <- TukeyHSD(herb_anova)
+
+# Summary of the post-hoc test
+print(tukey_herb)
+
+model_lm <- lm(proportion_non_zero ~ group, data = anova_herb_data)
+summary(model_lm)$r.squared
+
+```
+
+#SHANNON DIVERSITY
+
+```{r}
+##SHANNON DIVERSITY 
+# Calculate Shannon Diversity for each plot
+library(vegan)
+library(dplyr)
+
+# Convert "damage_type" to a factor to count occurrences
+leafdata <- leafdata %>%
+  mutate(damage_type = as.factor(damage_type))
+
+# Calculate Shannon Diversity for each site
+shannon_results <- leafdata %>%
+  group_by(site) %>%
+  summarize(ShannonIndex = diversity(table(damage_type), index = "shannon"))
+
+diversity_data <- leafdata %>% 
+  group_by(site)
+
+diversity_dat <- left_join(diversity_data, shannon_results, by = "site")
+
+diversity_dat
+
+diversity_anova <- aov(diversity_dat$ShannonIndex ~ diversity_dat$group, data=diversity_dat)
+
+summary(diversity_anova)
+
+plot(diversity_anova)
+
+# Perform Tukey's HSD post-hoc test
+tukey_diversity_1 <- TukeyHSD(diversity_anova)
+
+# Summary of the post-hoc test
+print(tukey_diversity_1)
+```
+#SHANON table
+
+```{r}
+# Calculate Shannon Diversity for each plot
+library(vegan)
+library(dplyr)
+
+# Convert "damage_type" to a factor to count occurrences
+leafdata <- leafdata %>%
+  mutate(damage_type = as.factor(damage_type))
+
+# Calculate Shannon Diversity for each site
+shannon_results <- leafdata %>%
+  group_by(group) %>%
+  summarize(ShannonIndex = diversity(table(damage_type), index = "shannon"))
+
+```
+#Shannon Anova
+
+```{r}
+# Load required libraries
+library(dplyr)
+
+# Prepare the dataframe
+shannon_dataframe <- diversity_dat %>% 
+  select(site, ShannonIndex, species, group) %>%
+  distinct()
+
+# Perform ANOVA on ShannonIndex by group
+diversity_anova_2 <- aov(ShannonIndex ~ group, data = shannon_dataframe)
+
+# View the ANOVA summary
+summary(diversity_anova_2)
+
+# Plot the ANOVA results
+plot(diversity_anova_2)
+
+# Perform Tukey's HSD post-hoc test
+tukey_diversity <- TukeyHSD(diversity_anova_2)
+
+# Print the summary of the post-hoc test
+print(tukey_diversity)
+
+# Fit a linear model to calculate R-squared
+model_lm <- lm(ShannonIndex ~ group, data = shannon_dataframe)
+
+# Calculate and print the R-squared value
+r_squared <- summary(model_lm)$r.squared
+print(paste("R-squared: ", round(r_squared, 4)))
+
+
+```
+
+#shannon plot code
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(vegan)
+my_colors <- c("N" = "#7392de", "R" = "#869948", "I" = "#e0632d")
+
+shannon_dataframe$species <- factor(shannon_dataframe$species, levels = c("B. asiatica", "H. tiliaceus", "N. forsteri", "M. collina", "D. erecta", "S. malaccense", "H. rosa-sinensis", "M. citrofolia", "L. camara", "S. campanulata", "M. calvescens", "S. cumini"))
+
+shannon_plots <- ggplot(shannon_dataframe, aes(x = species, y = ShannonIndex, fill = group)) +
+ geom_boxplot(position = position_dodge(width = 0.9), width = 0.7) +
+  labs( x = "Species", y = "Shannon Diversity Index", fill = "Group") +
+  scale_fill_manual(values = my_colors) + 
+  theme_minimal() +
+  theme(axis.text=element_text(size=9),axis.title=element_text(size=12))+
+  coord_flip()+
+  geom_jitter(size = 0.7)
+
+
+ggsave("shannon_plot.png", plot = shannon_plots, width = 5.76, height = 5, units = "in")
+shannon_plots
+```
+
+#functional feeding groups proportion
+
+```{r}
+
+
+proportions_funcfeed <- leafdata%>%
+  group_by(site, species, group, herbivory_type) %>%
+  summarize(count = n()) %>%
+  group_by(site) %>%
+  mutate(percentage = count / sum(count))
+
+
+type_anova <- aov(percentage ~ group*proportions_funcfeed$herbivory_type, data = proportions_funcfeed)
+
+summary(type_anova)
+
+tukey <- TukeyHSD(type_anova)
+
+model_lm <- lm(percentage ~ group * herbivory_type, data = proportions_funcfeed)
+
+# Calculate and print the R-squared value
+r_squared <- summary(model_lm)$r.squared
+print(paste("R-squared: ", round(r_squared, 4)))
+```
+
+#count of funcfeed
+
+```{r}
+funcfeed_count <- leafdata%>%
+  group_by(site, species, group, herbivory_type) %>%
+  summarize(count = n()) %>%
+  group_by(site) 
+
+type_anova_count <- aov(count ~ group*herbivory_type, data = funcfeed_count)
+
+summary(type_anova_count)
+
+tukey <- TukeyHSD(type_anova_count)
+model_lm <- lm(count ~ group * herbivory_type, data = funcfeed_count)
+
+# Calculate the R-squared value
+r_squared <- summary(model_lm)$r.squared
+print(r_squared)
+
+```
+#funcfeed test
+```{r}
+library(dplyr)
+library(tidyr)
+
+proportions_by_type <- leafdata %>%
+  group_by(site, herbivory_type, group, species) %>%
+  summarize(Proportion = n() / nrow(.), .groups = "drop") %>%
+  pivot_wider(names_from = herbivory_type, values_from = Proportion, values_fill = 0) %>%
+  ungroup()
+
+shaped_proportions_type <- proportions_by_type %>%
+  pivot_longer(cols = -c(site, group, species),
+               names_to = "Type_of_Herbivory_Group",
+               values_to = "proportion")
+
+# ANOVA
+type_anova <- aov(proportion ~ group * Type_of_Herbivory_Group, data = shaped_proportions_type)
+
+# Summary of ANOVA
+summary(type_anova)
+
+# Tukey HSD
+tukey_result <- TukeyHSD(type_anova)
+
+# Significant comparisons
+significant_pairs <- tukey_result$`group:Type_of_Herbivory_Group`
+selected_columns <- significant_pairs[, c( "p adj")]
+
+
+```
+
+#damage specificity Anova
+
+```{r}
+##DAMAGE INTENSITY DIVERSITY
+library(dplyr)
+
+proportions_by_site <- leafdata%>%
+  group_by(site, species, group, score) %>%
+  summarize(count = n()) %>%
+  group_by(site) %>%
+  mutate(percentage = count / sum(count))
+
+intensity_anova <- aov(proportion ~ group*intensity, data = shaped_proportions)
+
+summary(intensity_anova)
+
+
+# Perform Tukey's HSD post-hoc test
+tukey_intensity <- TukeyHSD(intensity_anova)
+
+# Summary of the post-hoc test
+print(tukey_intensity)
+model_lm <- lm(proportion ~ group * intensity, data = shaped_proportions)
+
+# Calculate the R-squared value
+r_squared <- summary(model_lm)$r.squared
+print(r_squared)
+
+```
+
+#specificity plot
+```{r}
+library(ggplot2)
+library(dplyr)
+
+specificty_plot <- ggplot(proportions_by_site, aes(x = score, y = percentage, fill = group)) +
+  geom_boxplot(position = position_dodge(width = 0.8), width = 0.7) +
+  labs(x = "Specificity score", y = "Proportion of Leaves Affected", fill = "Group") +
+  scale_fill_manual(values = c("N" = "#7392de", "R" = "#869948", "I" = "#e0632d", "NA" = "grey"))+
+  theme_minimal() +
+  theme(axis.text=element_text(size=9),axis.title=element_text(size=10))+
+  coord_flip()+
+  geom_jitter(size = 0.5)
+
+specificty_plot
+
+ggsave("specificty_plot.pdf", plot = specificty_plot,  width = 5.76, height = 5, units = "in")
+
+
+```
+
+#functional feeding plot
+
+```{r}
+library(ggplot2)
+library(RColorBrewer)
+my_colors <- c("N" = "#7392de", "R" = "#869948", "I" = "#e0632d")
+herb_cat_plot <- ggplot(leafdata, aes(x = herbivory_type, fill = group)) +
+  geom_bar(position = position_dodge(width = 0.6), width = 0.5) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), plot.title = element_text(hjust = 0.5)) +
+  labs( x = "Funcational Feeding Group", y = "Count", fill = "Group") +
+   scale_fill_manual(values = my_colors) +
+  theme_minimal()
+
+ggsave("herb_cat_plot.png", plot = herb_cat_plot, width = 16, height = 6, units = "in")
+```
+#rarefaction
+
+```{r}
+library(vegan)
+library(ggplot2)
+library(tidyverse)
+
+# read in leaf data
+leaf <- read_csv("leafdata.csv")
+
+# damage types per group to check
+leaf %>% group_by(group, damage_type) %>% count() %>% ungroup(damage_type) %>% count()
+
+# convert each row to a single leaf with damage types across columns, observed damage types noted as a "1"
+leaf_wide <- leaf %>% 
+  pivot_wider(id_cols = c("leaf","group"),
+              names_from = "damage_type",
+              values_from = "damage_type",
+              values_fn = function(x) sum(!is.na(x)), values_fill = 0) %>% 
+  select(-`NA`)
+
+# subset for each group
+leaf_wide_I <- leaf_wide %>% filter(group == "I")
+leaf_wide_N <- leaf_wide %>% filter(group == "N")
+leaf_wide_R <- leaf_wide %>% filter(group == "R") 
+
+# run species accumulation on our data
+accum_I <- poolaccum(leaf_wide_I[,3:84])
+accum_N <- poolaccum(leaf_wide_N[,3:84])
+accum_R <- poolaccum(leaf_wide_R[,3:84])
+
+# extract observed species richness estimates and create new dataframes
+obs_N <- data.frame(summary(accum_N)$S, check.names = FALSE)
+colnames(obs_N) <- c("N", "S", "lower2.5", "higher97.5", "std")
+head(obs_N) # just to see what we are working with
+obs_I <- data.frame(summary(accum_I)$S, check.names = FALSE)
+colnames(obs_I) <- c("N", "S", "lower2.5", "higher97.5", "std")
+obs_R <- data.frame(summary(accum_R)$S, check.names = FALSE)
+colnames(obs_R) <- c("N", "S", "lower2.5", "higher97.5", "std")
+
+# combine dataframes for each group
+obs_N <- obs_N %>% mutate(type = "N")
+obs_I <- obs_I %>% mutate(type = "I")
+obs_all <- obs_R %>% mutate(type = "R") %>% bind_rows(obs_N, obs_I)
+
+# plot all together to see curves in a single plot, colour-coded by plant group
+rarefaction<- obs_all %>%
+  ggplot(data = ., aes(x = N,
+                       y = S, group = type)) +
+  # Add confidence intervals
+  geom_ribbon(aes(ymin = lower2.5,
+                  ymax = higher97.5, fill = type),
+              alpha = 0.5) +
+  # Add observed richness line 
+  geom_line(aes(colour = type)) +
+    scale_fill_manual(values = my_colors) +
+  labs(x = "No. of leaves",
+       y = "Observed damage richness", fill = "Group") +
+  theme(
+    panel.background = element_blank(),  # Remove background color
+    panel.grid.major = element_line(color = "gray", size = 0.5),  # Adjust grid lines
+    panel.grid.minor = element_blank(),  # Remove minor grid lines
+    axis.text = element_text(size = 14),
+    axis.title = element_text(size = 14),
+    title = element_text(size = 14)
+  )
+ggsave("rarefaction.png", plot = rarefaction, width = 5.76, height = 6, units = "in")
+```
+#count anova
+
+```{r}
+count_data<- leaf %>% group_by(site, group, damage_type) %>% count() %>% ungroup(damage_type) %>% count()
+count_data <- as.data.frame(count_data)
+# Running the ANOVA
+diversity_anova_count <- aov(n ~ group, data = count_data)
+
+# Summary of the ANOVA
+summary(diversity_anova_count)
+
+tukey <-TukeyHSD(diversity_anova_count)
+
+print(tukey)
+model_lm <- lm(n ~ group, data = count_data)
+
+# Extracting the R-squared value from the model
+r_squared <- summary(model_lm)$r.squared
+print(r_squared)
+
+```
+##ROSAHIB
+# rosa and hib herb plot
+
+```{r}
+rosaandseanib <- subset(anova_herb_data, species %in% c("H. rosa-sinensis", "H. tiliaceus"))
+library(ggplot2)
+
+herbsearosa_plot <- ggplot(rosaandseanib, aes(x = species, y = proportion_non_zero, fill = species)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  labs(title = "Herbivory Differences Between H. tiliaceus and H. rosa-sinensis", x = "Species", y = "Proportion of Leaves Herbivored") +
+  scale_fill_manual(values = c("#a9d6de", "#f25e77"))
+
+ggsave("herbsearosa_plot.png", plot = herbsearosa_plot, width = 6, height = 6, units = "in")
+```
+#rosa and hib t test herb
+
+```{r}
+#hibiscus comparisons
+rosa_values <- anova_herb_data$proportion_non_zero[anova_herb_data$species == "H. rosa-sinensis"]
+seahib_values <- anova_herb_data$proportion_non_zero[anova_herb_data$species == "H. tiliaceus"]
+
+hibiscus_herb <- t.test(seahib_values, rosa_values)
+
+print(hibiscus_herb)
+```
+# rosa and hib t test shannon diversity
+
+```{r}
+
+rosa_values_div <- shannon_dataframe$ShannonIndex[shannon_dataframe$species == "H. rosa-sinensis"]
+seahib_values_div <- shannon_dataframe$ShannonIndex[shannon_dataframe$species == "H. tiliaceus"]
+
+hibiscus_div <- t.test(seahib_values_div, rosa_values_div)
+
+print(hibiscus_div)
+
+```
+
+#rosa and hib shannon plot
+
+```{r}
+hib_div <- subset(shannon_dataframe, species %in% c("H. tiliaceus", "H. rosa-sinensis"))
+library(ggplot2)
+
+hib_div_plot <- ggplot(hib_div, aes(x = species, y = camanddur_div$ShannonIndex, fill = species)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  labs(title = "Shannon Diversity differences Between H. tiliaceus and H. rosa-sinensisa", x = "Species", y = "Shannon Diversity Index") +
+  scale_fill_manual(values = c("#a9d6de", "#f25e77"))
+
+ggsave("hib_div_plot.png", plot = hib_div_plot, width = 6, height = 6, units = "in")
+
+shaped_proportions_hib <- subset(proportions_by_site, species %in% c("H. rosa-sinensis", "H. tiliaceus"))
+```
+#nonfor t test count
+```{r}
+count_data_fornoni<- leaf %>% group_by(site, species,damage_type) %>% count() %>% ungroup(damage_type) %>% count()
+noni_values_count <- count_data_fornoni$n[count_data_fornoni$species == "M. citrofolia"]
+for_values_count <- count_data_fornoni$n[count_data_fornoni$species == "N. forsteri"]
+
+t.test(noni_values_count, for_values_count)
+```
+
+#rosa hib specificty plot
+
+```{r}
+library(ggplot2)
+shaped_proportions_hib <- subset(proportions_by_site, species %in% c("H. rosa-sinensis", "H. tiliaceus"))
+specificty_boxplot_hib <- ggplot(shaped_proportions_hib, aes(x = score, y = percentage, fill = species)) +
+  geom_boxplot(position = "dodge", width = 0.7) +
+  theme_bw()+
+  theme(legend.position = "none")+
+  geom_jitter(size= 0.7)+
+  labs(x = "Specificity score", y = "Proportion of Leaves Affected")+
+  scale_fill_manual(values = c("#a9d6de", "#f25e77"))
+
+ggsave("specificty_boxplot_hib.pdf", plot = specificty_boxplot_hib, width = 12, height = 4, units = "in")
+
+
+```
+
+
+#rosa and hib count
+
+```{r}
+count_data_comp<- leaf %>% group_by(species, damage_type) %>% count() %>% ungroup(damage_type) %>% count()
+count_data_comp_hib <- subset(count_data_comp, species %in% c("L. camara", "D. erecta"))
+count_hib <- ggplot(count_data_comp_hib, aes(x = species, y = count_data_comp_hib$n , fill = species)) +
+ geom_bar(stat = "identity", position = position_dodge(width = 0.9), width = 0.7) +
+  labs(title = "Damage Types Observed in H. tiliaceus and H. rosa-sinensisa", x = "Species", y = "Number of Observed Different Damage Types", fill = "Group: 
+Native, Resident, Invasive") +
+   scale_fill_manual(values = c("#a9d6de", "#f25e77"))
+
+ggsave("count_hib.png", plot = count_hib, width = 6, height = 6, units = "in")
+
+```
+#seahib count test
+
+```{r}
+count_data_seahib<- leafdata %>% group_by(site, species,damage_type) %>% count() %>% ungroup(damage_type) %>% count()
+sea_values_count <- count_data_seahib$n[count_data_seahib$species == "H. tiliaceus"]
+hib_values_count <- count_data_seahib$n[count_data_seahib$species == "H. rosa-sinensis"]
+
+t.test(sea_values_count, hib_values_count)
+```
+#fun feeding plot sea hib
+
+```{r}
+library(ggplot2)
+library(RColorBrewer)
+
+leafdata_seahib <- subset(funcfeed_count, species %in% c("H. rosa-sinensis", "H. tiliaceus"))
+
+# Create the ggplot object
+seahib_funcfeed <- ggplot(leafdata_seahib, aes(x = species, y = count, fill = species)) +
+  geom_boxplot() +
+  labs(x = "Damage type", y = "Leaf Damage") +
+  coord_flip()+
+  theme_bw()+
+  facet_wrap(~herbivory_type)+ 
+  geom_jitter(size= 0.7)+
+  scale_fill_manual(values = c("#a9d6de", "#f25e77"))
+ggsave("seahib_funcfeed.png", plot = seahib_funcfeed, width = 12, height = 4, units = "in")
+```
+
+#func feeding sea hib
+
+```{r}
+funfeed_comp<- leafdata %>%
+  group_by(species, group, site, herbivory_type) %>%
+  summarise(Count = n()) %>%
+  ungroup()
+funfeed_comp_seahib<- subset(funfeed_comp, species %in% c("H. rosa-sinensis", "H. tiliaceus"))
+
+contingency_table_seahib <- xtabs(Count ~ species + herbivory_type, data = funfeed_comp_seahib)
+
+result <- chisq.test(contingency_table_seahib)
+print(result)
+```
+#rosahib intesnity div
+
+```{r}
+chisquare_dat<- leafdata %>%
+  group_by(species, group, site, score) %>%
+  summarise(Count = n()) %>%
+  ungroup()
+chisquare_dat_seahib<- subset(chisquare_dat, species %in% c("H. rosa-sinensis", "H. tiliaceus"))
+
+contingency_table_seahib <- xtabs(Count ~ species + score, data = chisquare_dat_seahib)
+
+result <- chisq.test(contingency_table_seahib)
+print(result)
+```
+#rosahib rarefaction
+```{r}
+# read in leaf data
+leaf <- read_csv("leafdata.csv")
+
+# damage types per group to check
+leaf %>% group_by(species, damage_type) %>% count() %>% ungroup(damage_type) %>% count()
+
+# convert each row to a single leaf with damage types across columns, observed damage types noted as a "1"
+leaf_wide <- leaf %>% 
+  pivot_wider(id_cols = c("leaf","species"),
+              names_from = "damage_type",
+              values_from = "damage_type",
+              values_fn = function(x) sum(!is.na(x)), values_fill = 0) %>% 
+  select(-`NA`)
+
+# subset for each group
+leaf_wide_rosa <- leaf_wide %>% filter(species == "H. rosa-sinensis")
+leaf_wide_sea <- leaf_wide %>% filter(species == "H. tiliaceus")
+
+# run species accumulation on our data
+accum_rosa <- poolaccum(leaf_wide_rosa[,3:84])
+accum_sea <- poolaccum(leaf_wide_sea[,3:84])
+
+# extract observed species richness estimates and create new dataframes
+obs_rosa <- data.frame(summary(accum_rosa)$S, check.names = FALSE)
+colnames(obs_rosa) <- c("N", "S", "lower2.5", "higher97.5", "std")
+
+obs_sea <- data.frame(summary(accum_sea)$S, check.names = FALSE)
+colnames(obs_sea) <- c("N", "S", "lower2.5", "higher97.5", "std")
+
+# combine dataframes for each group
+obs_rosa <- obs_rosa %>% mutate(type = "H. rosa-sinensis")
+obs_all <- obs_sea %>% mutate(type = "H. tiliaceus") %>% bind_rows(obs_rosa)
+
+# plot all together to see curves in a single plot, colour-coded by plant group
+rarefaction_seahib<- obs_all %>%
+  ggplot(data = ., aes(x = N,
+                       y = S, group = type)) +
+  # Add confidence intervals
+  geom_ribbon(aes(ymin = lower2.5,
+                  ymax = higher97.5, fill = type),
+              alpha = 0.5) +
+  theme_bw()+
+  # Add observed richness line 
+  geom_line(aes(colour = type)) +
+  theme(legend.position = "none")+
+  labs(x = "No. of leaves",
+       y = "Observed damage richness") +
+  scale_fill_manual(values = c("#a9d6de", "#f25e77")) 
+ggsave("rarefaction_seahib.png", plot = rarefaction_seahib, width = 13, height = 4, units = "in")
+```
+
+##CAMDUR
+# Camara + duranta t test herb
+
+```{r}
+##camara+duranta
+
+camara_values <- anova_herb_data$proportion_non_zero[anova_herb_data$species == "L. camara"]
+duranta_values <- anova_herb_data$proportion_non_zero[anova_herb_data$species == "D. erecta"]
+
+camdurt_herb <- t.test(camara_values, duranta_values)
+
+print(camdurt_herb)
+```
+
+#canmdur herb plot
+
+```{r}
+camanddur <- subset(anova_herb_data, species %in% c("L. camara", "D. erecta"))
+library(ggplot2)
+
+herbcamdur_plot <- ggplot(camanddur, aes(x = species, y = proportion_non_zero, fill = species)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  labs(title = "Herbivory Differences Between L. camara and D. erecta", x = "Species", y = "Proportion of Leaves Herbivored") +
+  scale_fill_manual(values = c("#9a65b5", "#edafca"))
+
+ggsave("herbcamdur_plot.png", plot = herbcamdur_plot, width = 6, height = 6, units = "in")
+```
+
+#camdur shannon t test
+
+```{r}
+camara_values_div <- shannon_dataframe$ShannonIndex[shannon_dataframe$species == "L. camara"]
+duranta_values_div <- shannon_dataframe$ShannonIndex[shannon_dataframe$species == "D. erecta"]
+
+camdurt_div <- t.test(camara_values_div, duranta_values_div)
+
+print(camdurt_div)
+```
+
+#cam dur shannon plot
+
+```{r}
+camanddur_div <- subset(shannon_dataframe, species %in% c("L. camara", "D. erecta"))
+library(ggplot2)
+
+
+camanddur_div_plot <- ggplot(camanddur_div, aes(x = species, y = camanddur_div$ShannonIndex, fill = species)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  labs(title = "Shannon Diversity differences Between L. camara and D. erecta", x = "Species", y = "Shannon Diversity Index") +
+  scale_fill_manual(values = c("#9a65b5", "#edafca"))
+
+ggsave("camanddur_div_plot.png", plot = camanddur_div_plot, width = 6, height = 6, units = "in")
+```
+
+
+#specificty camdur plot
+```{r}
+shaped_proportions_camdur <- subset(proportions_by_site, species %in% c("L. camara", "D. erecta"))
+
+specificty_boxplot_camdur  <- ggplot(shaped_proportions_camdur, aes(x = score, y = percentage, fill = species)) +
+  theme_bw()+
+  theme(legend.position = "none")+
+  geom_boxplot(position = "dodge", width = 0.7) +
+  geom_jitter(size= 0.7)+
+  labs(y = "Proportion of Leaves Affected")+
+  scale_fill_manual(values = c("#9a65b5", "#edafca"))
+
+ggsave("specificty_boxplot_camdur.pdf", plot = specificty_boxplot_camdur, width = 12, height = 4, units = "in")
+```
+
+#count plot camdur
+
+```{r}
+count_data_comp<- leaf %>% group_by(species, damage_type) %>% count() %>% ungroup(damage_type) %>% count()
+count_data_comp_camdur <- subset(count_data_comp, species %in% c("L. camara", "D. erecta"))
+
+count_camdur <- ggplot(count_data_comp_camdur, aes(x = species, y = count_data_comp_camdur$n , fill = species)) +
+ geom_bar(stat = "identity", position = position_dodge(width = 0.9), width = 0.7) +
+  labs(title = "Damage Types Observed in L. camara and D. erecta", x = "Species", y = "Number of Obsevred Different Damage Types", fill = "Group: 
+Native, Resident, Invasive") +
+   scale_fill_manual(values = c("#9a65b5", "#edafca")) 
+
+ggsave("count_camdur.png", plot = count_camdur, width = 6, height = 6, units = "in")
+```
+
+#count t test camdur
+
+```{r}
+count_data_camdur<- leafdata %>% group_by(site, species,damage_type) %>% count() %>% ungroup(damage_type) %>% count()
+for_values_count <- count_data_camdur$n[count_data_camdur$species == "N. forsteri"]
+noni_values_count <- count_data_camdur$n[count_data_camdur$species == "M. citrofolia"]
+
+t.test(for_values_count, noni_values_count)
+
+```
+#intensity tests camdur
+
+```{r}
+chisquare_dat<- leafdata %>%
+  group_by(species, group, site, score) %>%
+  summarise(Count = n()) %>%
+  ungroup()
+chisquare_dat_camdur<- subset(chisquare_dat, species %in% c("L. camara", "D. erecta"))
+
+contingency_table_camdur <- xtabs(Count ~ species + score, data = chisquare_dat_camdur)
+
+result <- chisq.test(contingency_table_camdur)
+print(result)
+
+```
+
+#functional feeding cam dur plot
+
+```{r}
+library(ggplot2)
+library(RColorBrewer)
+
+leafdata_camdur <- subset(funcfeed_count, species %in% c("L. camara", "D. erecta"))
+
+# Create the ggplot object
+funcfeed_camdur <- ggplot(leafdata_camdur, aes(x = species, y = count, fill = species)) +
+  geom_boxplot() +
+  labs(x = "Damage type", y = "Leaf Damage") +
+  coord_flip()+
+  theme_bw()+
+  geom_jitter(size= 0.7)+
+  facet_wrap(~herbivory_type)+ 
+  scale_fill_manual(values = c("#9a65b5", "#edafca"))
+
+
+
+# Save the plot as a PNG file
+ggsave("funcfeed_camdur.png", plot =funcfeed_camdur, width = 12, height = 4, units = "in")
+```
+
+#rarefaction camdur
+
+```{r}
+library(vegan)
+library(ggplot2)
+library(tidyverse)
+
+# read in leaf data
+leaf <- read_csv("leafdata.csv")
+
+# damage types per group to check
+leaf %>% group_by(species, damage_type) %>% count() %>% ungroup(damage_type) %>% count()
+
+# convert each row to a single leaf with damage types across columns, observed damage types noted as a "1"
+leaf_wide <- leaf %>% 
+  pivot_wider(id_cols = c("leaf","species"),
+              names_from = "damage_type",
+              values_from = "damage_type",
+              values_fn = function(x) sum(!is.na(x)), values_fill = 0) %>% 
+  select(-`NA`)
+
+# subset for each group
+leaf_wide_cam <- leaf_wide %>% filter(species == "L. camara")
+leaf_wide_dur <- leaf_wide %>% filter(species == "D. erecta")
+
+# run species accumulation on our data
+accum_cam <- poolaccum(leaf_wide_cam[,3:84])
+accum_dur <- poolaccum(leaf_wide_dur[,3:84])
+
+# extract observed species richness estimates and create new dataframes
+obs_cam <- data.frame(summary(accum_cam)$S, check.names = FALSE)
+colnames(obs_cam) <- c("N", "S", "lower2.5", "higher97.5", "std")
+head(obs_cam) # just to see what we are working with
+obs_dur <- data.frame(summary(accum_dur)$S, check.names = FALSE)
+colnames(obs_dur) <- c("N", "S", "lower2.5", "higher97.5", "std")
+
+# combine dataframes for each group
+obs_cam <- obs_cam %>% mutate(type = "L. camara")
+obs_all <- obs_dur %>% mutate(type = "D. erecta") %>% bind_rows(obs_cam)
+
+# plot all together to see curves in a single plot, colour-coded by plant group
+rarefaction_camdur<- obs_all %>%
+  ggplot(data = ., aes(x = N,
+                       y = S, group = type)) +
+  # Add confidence intervals
+  geom_ribbon(aes(ymin = lower2.5,
+                  ymax = higher97.5, fill = type),
+              alpha = 0.5) +
+  theme_bw()+
+  # Add observed richness line 
+  geom_line(aes(colour = type)) +
+  theme(legend.position = "none")+
+  labs(x = "No. of leaves",
+       y = "Observed damage richness") +
+  scale_fill_manual(values = c("#9a65b5", "#edafca")) 
+ggsave("rarefaction_camdur.png", plot = rarefaction_camdur, width = 13, height = 4, units = "in")
+```
+
+##NONI and FORSTERI 
+#noni for count test
+
+```{r}
+count_data_nonfor<- leafdata %>% group_by(site, species,damage_type) %>% count() %>% ungroup(damage_type) %>% count()
+camara_values_count <- count_data_nonfor$n[count_data_camdur$species == "L. camara"]
+duranta_values_count <- count_data_nonfor$n[count_data_camdur$species == "D. erecta"]
+
+t.test(camara_values_count, duranta_values_count)
+```
+
+#noni and forsteri herb t test
+
+```{r}
+#noniforsteri
+
+noni_values <- anova_herb_data$proportion_non_zero[anova_herb_data$species == "M. citrofolia"]
+forsteri_values <- anova_herb_data$proportion_non_zero[anova_herb_data$species == "N. forsteri"]
+
+nonfor_herb <- t.test(noni_values, forsteri_values)
+
+print(nonfor_herb)
+```
+
+#nonfor herb plot
+
+```{r}
+forandnoni <- subset(anova_herb_data, species %in% c("N. forsteri", "M. citrofolia"))
+library(ggplot2)
+
+herbfornon_plot <- ggplot(forandnoni, aes(x = species, y = proportion_non_zero, fill = species)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  labs(title = "Herbivory Differences Between M. citrofolia and N. forsteri", x = "Species", y = "Proportion of Leaves Herbivored") +
+  scale_fill_manual(values = c("#c9d49f", "#869948"))
+
+ggsave("herbfornon_plot.png", plot = herbfornon_plot, width = 6, height = 6, units = "in")
+```
+
+#nonfor shannon test
+
+```{r}
+noni_values_div <- shannon_dataframe$ShannonIndex[shannon_dataframe$species == "M. citrofolia"]
+forsteri_values_div <- shannon_dataframe$ShannonIndex[shannon_dataframe$species == "N. forsteri"]
+
+nonfor_div <- t.test(noni_values_div, forsteri_values_div)
+
+print(nonfor_div)
+```
+
+#nonfor shannon plot
+
+```{r}
+#non sure what i did here
+#nonfor_score <- specificty_data %>% 
+  #filter(species %in% c("M. citrofolia", "N. forsteri")) 
+
+forandnoni_div <- subset(shannon_dataframe, species %in% c("N. forsteri", "M. citrofolia"))
+library(ggplot2)
+
+herbfornon_div_plot <- ggplot(forandnoni_div, aes(x = species, y = forandnoni_div$ShannonIndex, fill = species)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  labs(title = "Shannon Diversity differences Between M. citrofolia and N. forsteri", x = "Species", y = "Shannon Diversity Index") +
+  scale_fill_manual(values = c("#c9d49f", "#869948"))
+
+ggsave("herbfornon_div_plot.png", plot = herbfornon_div_plot, width = 6, height = 6, units = "in")
+```
+
+#nonfor specificty plot
+
+```{r}
+
+shaped_proportions_nonfor <- subset(proportions_by_site, species %in% c("N. forsteri", "M. citrofolia"))
+
+specificty_boxplot_nonfor  <- ggplot(shaped_proportions_nonfor, aes(x = score, y = percentage, fill = species)) +
+  theme_bw()+
+  theme(legend.position = "none")+
+  geom_jitter(size= 0.7)+
+  geom_boxplot(position = "dodge", width = 0.7) +
+  labs( x = "Specificity score", y = "Proportion of Leaves Affected")+
+  scale_fill_manual(values = c("#c9d49f", "#869948"))
+
+ggsave("specificty_boxplot_nonfor.pdf", plot = specificty_boxplot_nonfor, width = 12, height = 4, units = "in")
+```
+
+#func feeding plot noni forst
+
+```{r}
+library(ggplot2)
+library(RColorBrewer)
+
+leafdata_nonifor <- subset(funcfeed_count, species %in% c("N. forsteri", "M. citrofolia"))
+
+# Create the ggplot object
+nonfor_funcfeed <- ggplot(leafdata_nonifor, aes(x = species, y = count, fill = species)) +
+  geom_boxplot() +
+  labs(x = "Damage type", y = "Leaf Damage") +
+  coord_flip()+
+  theme_bw()+
+  geom_jitter(size= 0.7)+
+  facet_wrap(~herbivory_type)+ 
+  scale_fill_manual(values = c("#c9d49f", "#869948"))
+ggsave("nonfor_funcfeed.png", plot = nonfor_funcfeed, width = 12, height = 4, units = "in")
+
+```
+
+#count nonfor plot
+
+```{r}
+count_data_comp<- leaf %>% group_by(species, damage_type) %>% count() %>% ungroup(damage_type) %>% count()
+count_data_comp_nonfor <- subset(count_data_comp, species %in% c("N. forsteri", "M. citrofolia"))
+
+count_nonfor <- ggplot(count_data_comp_nonfor, aes(x = species, y = count_data_comp_nonfor$n , fill = species)) +
+ geom_bar(stat = "identity", position = position_dodge(width = 0.9), width = 0.7) +
+  labs(title = "Damage Types Observed in  M. citrofolia and N. forsteri", x = "Species", y = "Number of Obsevred Different Damage Types", fill = "Group: 
+Native, Resident, Invasive") +
+   scale_fill_manual(values = c("#c9d49f", "#869948")) 
+
+ggsave("count_nonfor.png", plot = count_nonfor, width = 6, height = 6, units = "in")
+###figure out intensity code, chi square?
+
+```
+#func feeding noni for
+
+```{r}
+funfeed_comp<- leafdata %>%
+  group_by(species, group, site, herbivory_type) %>%
+  summarise(Count = n()) %>%
+  ungroup()
+funfeed_comp_nonifor<- subset(funfeed_comp, species %in% c("N. forsteri", "M. citrofolia"))
+
+contingency_table_nonifor <- xtabs(Count ~ species + herbivory_type, data = funfeed_comp_nonifor)
+
+result <- chisq.test(contingency_table_nonifor)
+print(result)
+```
+
+#intensity noni for
+
+```{r}
+chisquare_dat<- leafdata %>%
+  group_by(species, group, site, score) %>%
+  summarise(Count = n()) %>%
+  ungroup()
+chisquare_dat_nonfor<- subset(chisquare_dat, species %in% c("M. citrofolia", "N."))
+
+contingency_table_nonfor <- xtabs(Count ~ species + score, data = chisquare_dat_nonfor)
+
+result <- chisq.test(contingency_table_nonfor)
+print(result)
+```
+#nonfor rarefaction
+```{r}
+# read in leaf data
+leaf <- read_csv("leafdata.csv")
+
+# damage types per group to check
+leaf %>% group_by(species, damage_type) %>% count() %>% ungroup(damage_type) %>% count()
+
+# convert each row to a single leaf with damage types across columns, observed damage types noted as a "1"
+leaf_wide <- leaf %>% 
+  pivot_wider(id_cols = c("leaf","species"),
+              names_from = "damage_type",
+              values_from = "damage_type",
+              values_fn = function(x) sum(!is.na(x)), values_fill = 0) %>% 
+  select(-`NA`)
+
+# subset for each group
+leaf_wide_non <- leaf_wide %>% filter(species == "M. citrofolia")
+leaf_wide_for <- leaf_wide %>% filter(species == "N. forsteri")
+
+# run species accumulation on our data
+accum_non <- poolaccum(leaf_wide_non[,3:84])
+accum_for <- poolaccum(leaf_wide_for[,3:84])
+
+# extract observed species richness estimates and create new dataframes
+obs_non <- data.frame(summary(accum_non)$S, check.names = FALSE)
+colnames(obs_non) <- c("N", "S", "lower2.5", "higher97.5", "std")
+head(obs_non) # just to see what we are working with
+obs_for <- data.frame(summary(accum_for)$S, check.names = FALSE)
+colnames(obs_for) <- c("N", "S", "lower2.5", "higher97.5", "std")
+
+# combine dataframes for each group
+obs_non <- obs_non %>% mutate(type = "M. citrofolia")
+obs_all <- obs_for %>% mutate(type = "N. forsteri") %>% bind_rows(obs_non)
+
+# plot all together to see curves in a single plot, colour-coded by plant group
+rarefaction_nonfor<- obs_all %>%
+  ggplot(data = ., aes(x = N,
+                       y = S, group = type)) +
+  # Add confidence intervals
+  geom_ribbon(aes(ymin = lower2.5,
+                  ymax = higher97.5, fill = type),
+              alpha = 0.5) +
+  theme_bw()+
+  theme(legend.position = "none")+
+  # Add observed richness line 
+  geom_line(aes(colour = type)) +
+  labs(x = "No. of leaves",
+       y = "Observed damage richness") +
+  scale_fill_manual(values = c("#c9d49f", "#869948")) 
+ggsave("rarefaction_nonfor.png", plot = rarefaction_nonfor, width = 13, height = 4, units = "in")
+```
+
+
+#count t test non for
+
+```{r}
+
+count_data_fornoni<- leaf %>% group_by(site, species,damage_type) %>% count() %>% ungroup(damage_type) %>% count()
+noni_values_count <- count_data_fornoni$n[count_data_fornoni$species == "M. citrofolia"]
+for_values_count <- count_data_fornoni$n[count_data_fornoni$species == "N. forsteri"]
+
+t.test(noni_values_count, for_values_count)
+
+```
+##TRIPLE FAM 
+
+#specificty 3 plot
+```{r}
+shaped_proportions_3 <- subset(proportions_by_site, species %in% c("M. collina", "S. malaccense", "S. cumini"))
+
+specificty_plot_3 <- ggplot(shaped_proportions_3, aes(x = score, y = percentage, fill = species)) +
+  theme_bw()+
+  geom_jitter(size= 0.7)+
+  theme(legend.position = "none")+
+  geom_boxplot(position = position_dodge(width = 0.8), width = 0.7) +
+  labs(x = "Specificity score", y = "Proportion of Leaves Affected") +
+  scale_fill_manual(values = c("#A30262", "#D162A4", "#FF9A56"))
+
+
+ggsave("specificty_plot_3.pdf", plot = specificty_plot_3, width = 12, height = 4, units = "in")
+```
+#anova code for the three herb
+
+```{r}
+library(dplyr)
+threespecies <- subset(anova_herb_data, species %in% c("M. collina", "S. malaccense", "S. cumini"))
+
+herb_anova_3 <- aov(threespecies$proportion_non_zero ~ threespecies$species, data=threespecies)
+
+summary(herb_anova)
+
+# Perform Tukey's HSD post-hoc test
+tukey_herb <- TukeyHSD(herb_anova)
+
+# Summary of the post-hoc test
+print(tukey_herb)
+model_lm <- lm(proportion_non_zero ~ species, data = threespecies)
+
+# Get the R-squared value from the linear model
+summary(model_lm)$r.squared
+```
+
+#3 herb plot
+
+```{r}
+threespecies$species <- factor(threespecies$species, levels = c( "M. collina", "S. malaccense","S. cumini"))
+
+threespecies_plot <- ggplot(threespecies, aes(x = species, y = proportion_non_zero, fill = species)) +
+  
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  labs(title = "Herbivory Differences Between M. collina, S. malaccense and S. cumini", x = "Species", y = "Proportion of Leaves Herbivored") +
+  scale_fill_manual(values = c("#A30262", "#D162A4", "#FF9A56")
+
+ggsave("threespecies_plot.png", plot = threespecies_plot, width = 6, height = 6, units = "in")
+
+threespecies_plot
+```
+
+#3 anova div
+
+```{r}
+shannon_dataframe_3 <- subset(shannon_dataframe, species %in% c("M. collina", "S. malaccense", "S. cumini"))
+
+shannon_dataframe_3
+
+diversity_anova_3 <- aov(shannon_dataframe_3$ShannonIndex ~ shannon_dataframe_3$species, data=shannon_dataframe_3)
+
+summary(diversity_anova_3)
+
+plot(diversity_anova_3)
+
+# Perform Tukey's HSD post-hoc test
+tukey_diversity <- TukeyHSD(diversity_anova_3)
+
+# Summary of the post-hoc test
+print(tukey_diversity)
+
+r2_shannon_3 <- lm(ShannonIndex ~ species, data = shannon_dataframe_3)
+summary(r2_shannon_3)$r.squared
+```
+
+#3 shannon plot
+
+```{r}
+shannon_plots_3 <- ggplot(shannon_dataframe_3, aes(x = species, y = ShannonIndex, fill = species)) +
+ geom_bar(stat = "identity", position = position_dodge(width = 0.9), width = 0.7) +
+  labs(title = "Shannon Diversity Between M. collina, S. malaccense and S. cumini", x = "Species", y = "Shannon Diversity Index", fill = "Group: 
+Native, Resident, Invasive") +
+   scale_fill_manual(values = c("#A30262", "#D162A4", "#FF9A56")) 
+
+ggsave("shannon_plots_3.png", plot = shannon_plots_3, width = 6, height = 6, units = "in")
+```
+
+#3 count plot
+
+```{r}
+count_data_comp<- leaf %>% group_by(species, damage_type) %>% count() %>% ungroup(damage_type) %>% count()
+count_data_comp <- subset(count_data_comp, species %in% c("S. malaccense", "S. cumini", "M. collina"))
+
+count_3 <- ggplot(count_data_comp, aes(x = species, y = count_data_comp$n , fill = species)) +
+ geom_bar(stat = "identity", position = position_dodge(width = 0.9), width = 0.7) +
+  labs(title = "Damage Types Observed in M. collina, S. malaccense and S. cumin", x = "Species", y = "Number of Obsevred Different Damage Types", fill = "Group: 
+Native, Resident, Invasive") +
+   scale_fill_manual(values = c(x)) + 
+  theme_light()
+ggsave("count_3.png", plot = count_3, width = 6, height = 6, units = "in")
+
+```
+
+#3 specificty plot
+
+```{r}
+shaped_proportions_3 <- subset(proportions_by_site, species %in% c("M. collina", "S. malaccense", "S. cumini"))
+
+
+specificty_plot_3  <- ggplot(shaped_proportions_3, aes(x = score, y = percentage, fill = species)) +
+  geom_boxplot(position = "dodge", width = 0.7) +
+  theme_bw()+
+  geom_jitter(size= 0.7)+
+  theme(legend.position = "none")+
+  labs( x = "Specificity score", y = "Proportion of Leaves Affected")+
+  scale_fill_manual(values = c("#A30262", "#D162A4", "#FF9A56"))
+
+ggsave("specificty_plot_3.png", plot = specificty_plot_3, width = 12, height = 4, units = "in")
+
+```
+
+#3 specificty anova
+
+```{r}
+intensity_anova_3 <- aov(percentage ~ species*score, data = shaped_proportions_3)
+
+summary(intensity_anova_3)
+
+
+# Perform Tukey's HSD post-hoc test
+tukey_intensity <- TukeyHSD(intensity_anova_3)
+
+# Summary of the post-hoc test
+print(tukey_intensity)
+```
+
+#div count anova 3
+
+```{r}
+count_data_333<- leaf %>% group_by(site, species,damage_type) %>% count() %>% ungroup(damage_type) %>% count()
+count_data_333 <- subset(count_data_333, species %in% c("S. malaccense", "S. cumini", "M. collina"))
+
+ count_3_aov <- aov(n ~ species, data = count_data_333)
+
+ summary(count_3_aov)
+ 
+ TukeyHSD(count_3_aov)
+```
+
+
+#fun feeding plot 3 spcies
+
+```{r}
+library(ggplot2)
+library(RColorBrewer)
+
+leafdata_3 <- subset(funcfeed_count, species %in% c("M. collina", "S. malaccense","S. cumini"))
+
+# Create the ggplot object
+funcfeed_plot_3 <- ggplot(leafdata_3, aes(x = species, y = count, fill = species)) +
+  geom_boxplot() +
+  labs(x = "Damage type", y = "Leaf Damage") +
+  coord_flip()+
+  theme_bw()+
+  facet_wrap(~herbivory_type)+
+  geom_jitter(size= 0.7)+
+  scale_fill_manual(values = c("#A30262", "#D162A4", "#FF9A56"))
+  
+
+ggsave("funcfeed_plot_3.png", plot = funcfeed_plot_3, width = 12, height = 4, units = "in")
+
+```
+
+```{r}
+library(patchwork)
+funcfeed_ultra <- funcfeed_plot_3 + funcfeed_camdur + nonfor_funcfeed + seahib_funcfeed + plot_layout(ncol = 1)
+
+
+
+ggsave("funcfeed_ultra.png", plot = funcfeed_ultra, width = 10, height = 13, units = "in")
+```
+
+```{r}
+funcfeed_plot <- ggplot(funcfeed_count, aes(x = group, y = count, fill = group)) +
+  geom_boxplot() +
+  labs(x = "Damage type", y = "Leaf Damage") +
+  theme_minimal()+
+  geom_jitter(size=0.5)+
+  facet_wrap(~herbivory_type)+ 
+  theme(axis.text = element_text(size = 13),
+    axis.title = element_text(size = 13),
+    strip.text = element_text(size = 13),  # Adjust facet label size
+    strip.background = element_blank() )+
+  scale_fill_manual(values = c("N" = "#7392de", "R" = "#869948", "I" = "#e0632d"))
+
+
+ggsave("funcfeed_plot.png", plot = funcfeed_plot,  width = 7, height = 8, units = "in")
+```
+
+#rarefaction species
+
+```{r}
+library(vegan)
+library(ggplot2)
+library(tidyverse)
+
+# read in leaf data
+leaf <- read_csv("leafdata.csv")
+
+# damage types per group to check
+leaf %>% group_by(species, damage_type) %>% count() %>% ungroup(damage_type) %>% count()
+
+# convert each row to a single leaf with damage types across columns, observed damage types noted as a "1"
+leaf_wide <- leaf %>% 
+  pivot_wider(id_cols = c("leaf","species"),
+              names_from = "damage_type",
+              values_from = "damage_type",
+              values_fn = function(x) sum(!is.na(x)), values_fill = 0) %>% 
+  select(-`NA`)
+
+# subset for each group
+leaf_wide_collina <- leaf_wide %>% filter(species == "M. collina")
+leaf_wide_malay <- leaf_wide %>% filter(species == "S. malaccense")
+leaf_wide_cumini <- leaf_wide %>% filter(species == "S. cumini") 
+
+# run species accumulation on our data
+accum_cumini <- poolaccum(leaf_wide_cumuni[,3:84])
+accum_collina <- poolaccum(leaf_wide_collina[,3:84])
+accum_malay <- poolaccum(leaf_wide_malay[,3:84])
+
+# extract observed species richness estimates and create new dataframes
+obs_collina <- data.frame(summary(accum_collina)$S, check.names = FALSE)
+colnames(obs_collina) <- c("N", "S", "lower2.5", "higher97.5", "std")
+head(obs_collina) # just to see what we are working with
+obs_cumini <- data.frame(summary(accum_cumini)$S, check.names = FALSE)
+colnames(obs_cumini) <- c("N", "S", "lower2.5", "higher97.5", "std")
+obs_malay <- data.frame(summary(accum_malay)$S, check.names = FALSE)
+colnames(obs_malay) <- c("N", "S", "lower2.5", "higher97.5", "std")
+
+# combine dataframes for each group
+obs_collina <- obs_collina %>% mutate(type = "M. collina")
+obs_cumini <- obs_cumini %>% mutate(type = "S. cumini")
+obs_all <- obs_malay %>% mutate(type = "S. malaccense") %>% bind_rows(obs_collina, obs_cumini)
+
+# plot all together to see curves in a single plot, colour-coded by plant group
+rarefaction_3<- obs_all %>%
+  ggplot(data = ., aes(x = N,
+                       y = S, group = type)) +
+  # Add confidence intervals
+  geom_ribbon(aes(ymin = lower2.5,
+                  ymax = higher97.5, fill = type),
+              alpha = 0.5) +
+  theme_bw()+
+  # Add observed richness line 
+  geom_line(aes(colour = type)) +
+  theme(legend.position = "none")+
+  labs(x = "No. of leaves",
+       y = "Observed damage richness") +
+  scale_fill_manual(values = c("#A30262", "#D162A4", "#FF9A56")) 
+ggsave("rarefaction_3.png", plot = rarefaction_3, width = 13, height = 4, units = "in")
+```
+
+
+
+##COMBINING PLOTS 
+```{r}
+library(patchwork)
+rarefaction_ultra <- rarefaction_3 + rarefaction_camdur + rarefaction_nonfor + rarefaction_seahib
+
+ggsave("rarefaction_ultra.png", plot = rarefaction_ultra, width = 7, height = 4, units = "in")
+
+```
+
+
+#ultra specificty intensity
+
+```{r}
+library(patchwork)
+specificty_ultra <- specificty_plot_3 + specificty_boxplot_camdur + specificty_boxplot_nonfor + specificty_boxplot_hib
+
+library(ggplot2)
+
+
+ggsave("specificty_ultra.png", plot = specificty_ultra, width = 9, height = 5, units = "in")
+
